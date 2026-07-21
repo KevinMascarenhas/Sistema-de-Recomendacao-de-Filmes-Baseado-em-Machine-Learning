@@ -21,6 +21,8 @@ O projeto foi inspirado por demos clássicas de recomendação de filmes em mach
 - `scikit-learn`
 - `pandas`
 - `TMDB API`
+- `bcrypt`
+- `MongoDB`
 
 ## Estrutura do projeto
 
@@ -28,11 +30,16 @@ O projeto foi inspirado por demos clássicas de recomendação de filmes em mach
 .
 |-- app.py
 |-- src/
-|   |-- tmdb_client.py
 |   |-- recommender.py
-|   `-- train_model.py
+|   |-- train_model.py
+        users/
+        |-- user.py
+        |-- user_favorites.py
+        |-- user_watched.py
+        integrations/
+        |-- tmdb_client.py
 |-- data/
-|   `-- movies.csv
+|   |-- movies.csv
 |-- artifacts/
 |-- requirements.txt
 |-- .env

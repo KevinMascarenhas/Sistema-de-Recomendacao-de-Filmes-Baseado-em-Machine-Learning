@@ -12,6 +12,15 @@ class UserService: # Classe responsável por gerenciar operações relacionadas 
         self.users = users_collection    # Coleção do MongoDB onde os usuários serão salvos.
         self.users.create_index("username", unique=True) # Cria um índice único no campo "username" para impedir que dois usuários tenham o mesmo nome de usuário.
 
+    def hash_password(self, password: str) -> bytes:
+        password_bytes = password.encode("utf-8")
+        salt = bcrypt.gensalt() # Gera um salt aleatório para o hash da senha. Dessa forma, mesmo que dois usuários tenham a mesma senha, os hashes serão diferentes.
+        return bcrypt.hashpw(password_bytes, salt)
+
+    def check_password(self, password: str, password_hash: bytes) -> bool:  # Compara a senha fornecida com o hash armazenado no banco de dados para autenticação do usuário.
+        password_bytes = password.encode("utf-8")
+        return bcrypt.checkpw(password_bytes, password_hash)
+    
     def create_user(self, username: str, password: str, email: Optional[str] = None) -> dict: # dict para retornar os dados do usuário criado, sem a senha.
         if not username or not password:
             raise ValueError("Username e senha são obrigatórios.")
@@ -29,7 +38,7 @@ class UserService: # Classe responsável por gerenciar operações relacionadas 
         }
 
         try:
-            result = self.users.insert_one(user_data)
+            result = self.users.insert_one(user_data) # insert one é uma função do pymongo que insere um documento novo na coleção. Se o username já existir, será levantada uma exceção DuplicateKeyError.
         except DuplicateKeyError:
             raise ValueError("Este username já está em uso.")
 
@@ -39,7 +48,7 @@ class UserService: # Classe responsável por gerenciar operações relacionadas 
         return user_data
 
     def authenticate_user(self, username: str, password: str) -> Optional[dict]:
-        user = self.users.find_one({
+        user = self.users.find_one({   # find one é uma função do pymongo que retorna o primeiro documento que corresponde à consulta. 
             "username": username.strip().lower(),
             "is_active": True,
         })
@@ -47,7 +56,7 @@ class UserService: # Classe responsável por gerenciar operações relacionadas 
         if not user:
             return None
 
-        if not self._check_password(password, user["password_hash"]):
+        if not self.check_password(password, user["password_hash"]):
             return None
 
         user.pop("password_hash", None)
@@ -86,13 +95,4 @@ class UserService: # Classe responsável por gerenciar operações relacionadas 
             },
         )
 
-        return result.modified_count > 0
-
-    def hash_password(self, password: str) -> bytes:
-        password_bytes = password.encode("utf-8")
-        salt = bcrypt.gensalt()
-        return bcrypt.hashpw(password_bytes, salt)
-
-    def _check_password(self, password: str, password_hash: bytes) -> bool:
-        password_bytes = password.encode("utf-8")
-        return bcrypt.checkpw(password_bytes, password_hash)
+        return result.modified_count > 0 # modified_count indica quantos documentos foram modificados. Se o número for maior que 0, significa que o usuário foi atualizado com sucesso e o onboarding foi concluído.
