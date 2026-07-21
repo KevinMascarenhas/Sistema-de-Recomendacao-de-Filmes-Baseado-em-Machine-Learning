@@ -5,12 +5,12 @@ import streamlit as st
 
 sys.path.append(str(Path(__file__).parent / "src"))
 
-from tmdb_client import TMDBClient
+from integrations.tmdb_client import TMDBClient
 
 
 st.set_page_config(page_title="MovieMatch", layout="wide")
 st.title("MovieMatch")
-st.caption("Busque filmes na TMDB e receba recomendacoes da propria TMDB.")
+st.caption("Busque filmes e receba recomendações.")
 
 
 @st.cache_resource
@@ -91,7 +91,7 @@ if selected_label:
             with recommendation_columns[index % 3]:
                 render_movie_card(tmdb, movie)
     else:
-        st.info("A TMDB não retornou recomendacoes para esse filme.")
+        st.info("A TMDB não retornou recomendações para esse filme.")
 
     if similar_movies:
         st.subheader("Você pode gostar também:")
@@ -99,7 +99,7 @@ if selected_label:
         for index, movie in enumerate(similar_movies[:6]):
             with similar_columns[index % 3]:
                 render_movie_card(tmdb, movie)
-elif query:
-    st.info("Nenhum filme encontrado para essa busca.")
-else:
-    st.info("Digite um título para buscar filmes.")
+    elif query:
+        st.info("Nenhum filme encontrado para essa busca.")
+    else:
+        st.info("Digite um título para buscar filmes.")
