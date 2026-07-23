@@ -16,7 +16,7 @@ MONGODB_DATABASE_ENV = "MONGODB_DATABASE"
 DEFAULT_DATABASE_NAME = "movie_recommendation"
 
 
-@lru_cache(maxsize=1)
+@lru_cache(maxsize=1)   # Decorator que armazena em cache o resultado da função para evitar múltiplas conexões com o banco de dados. O cache é limitado a 1 item, garantindo que apenas uma instância do cliente MongoDB seja criada durante a execução do aplicativo.
 def get_mongo_client() -> MongoClient:
     mongodb_uri = os.getenv(MONGODB_URI_ENV)
 
