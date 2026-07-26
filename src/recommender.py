@@ -9,6 +9,7 @@ from typing import Any
 
 # Dependencias principais de processamento e similaridade
 import pandas as pd
+from scipy.sparse import hstack
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
@@ -45,8 +46,35 @@ def _join_tokens(row: pd.Series) -> str:
     return _normalize_text(" ".join(parts))
 
 
+DEFAULT_FIELD_WEIGHTS: dict[str, float] = {
+    "genre": 3.0,
+    "overview": 1.0,
+    "cast": 2.0,
+    "director": 2.0,
+}
+
+
+def _build_weighted_feature_matrix(
+    movies: pd.DataFrame,
+    field_weights: dict[str, float],
+) -> object:
+    # Converte cada campo em uma matriz de características separada.
+    # Depois aplica o peso desejado em cada matriz e concatena horizontalmente.
+    feature_matrices = []
+    for field in ["genre", "overview", "cast", "director"]:
+        raw_text = movies[field].fillna("").astype(str)
+        vectorizer = CountVectorizer(max_features=5000, stop_words="english")
+        matrix = vectorizer.fit_transform(raw_text)
+        weight = field_weights.get(field, 1.0)
+        if weight != 1.0:
+            matrix = matrix.multiply(weight)
+        feature_matrices.append(matrix)
+
+    return hstack(feature_matrices)
+
+
 def _build_tmdb_movie_record(movie_details: dict[str, Any]) -> dict[str, Any]:
-    # Recebe o payload bruto da TMDB e padroniza as informações do filme.
+    # Recebe os dados do TMDB e padroniza as informações do filme.
     # Isso evita que o restante da classe precise lidar com estruturas diferentes.
     credits = movie_details.get("credits", {})
 
@@ -60,10 +88,10 @@ def _build_tmdb_movie_record(movie_details: dict[str, Any]) -> dict[str, Any]:
         if person.get("job") == "Director"
     ]
 
-    # Coleta os nomes dos generos do filme.
+    # Coleta os nomes dos gêneros do filme.
     genres = [genre["name"] for genre in movie_details.get("genres", [])]
 
-    # Extrai o ano de lancamento da data completa, se existir.
+    # Extrai o ano de lançamento da data completa, se existir.
     release_year = movie_details.get("release_date") or ""
 
     return {
@@ -98,10 +126,9 @@ class MovieRecommender:
         # Cria a coluna de tags textual para cada filme usando a funcao auxiliar.
         movies["tags"] = movies.apply(_join_tokens, axis=1)
 
-        # Converte texto em vetores numéricos e calcula similaridade por cosseno.
-        vectorizer = CountVectorizer(max_features=5000, stop_words="english")
-        vectors = vectorizer.fit_transform(movies["tags"]).toarray()
-        similarity = cosine_similarity(vectors)
+        # Converte cada campo em vetores separados e aplica pesos personalizados.
+        feature_matrix = _build_weighted_feature_matrix(movies, DEFAULT_FIELD_WEIGHTS)
+        similarity = cosine_similarity(feature_matrix)
 
         return cls(movies=movies, similarity_matrix=similarity)
 
@@ -130,9 +157,8 @@ class MovieRecommender:
         movies["tags"] = movies.apply(_join_tokens, axis=1)
 
         # Reutiliza a mesma logica de vetorizacao e similaridade do treino por CSV.
-        vectorizer = CountVectorizer(max_features=5000, stop_words="english")
-        vectors = vectorizer.fit_transform(movies["tags"]).toarray()
-        similarity = cosine_similarity(vectors)
+        feature_matrix = _build_weighted_feature_matrix(movies, DEFAULT_FIELD_WEIGHTS)
+        similarity = cosine_similarity(feature_matrix)
 
         return cls(movies=movies, similarity_matrix=similarity)
 
