@@ -64,10 +64,25 @@ class TMDBClient:
         return payload.get("results", [])
 
     def get_movie_details(self, movie_id: int, language: str = "pt-BR") -> dict[str, Any]:
+        # Pedimos `credits` e `keywords` para obter elenco/direção e possíveis palavras-chave
         return self._get(
             f"/movie/{movie_id}",
-            {"language": language, "append_to_response": "credits"},
+            {"language": language, "append_to_response": "credits,keywords"},
         )
+
+    def get_popular_movies(self, language: str = "pt-BR", page: int = 1) -> list[dict[str, Any]]:
+        payload = self._get(
+            "/movie/popular",
+            {"language": language, "page": page},
+        )
+        return payload.get("results", [])
+
+    def get_top_rated_movies(self, language: str = "pt-BR", page: int = 1) -> list[dict[str, Any]]:
+        payload = self._get(
+            "/movie/top_rated",
+            {"language": language, "page": page},
+        )
+        return payload.get("results", [])
 
     def get_movie_recommendations(
         self,

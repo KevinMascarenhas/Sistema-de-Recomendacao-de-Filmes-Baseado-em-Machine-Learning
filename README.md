@@ -2,53 +2,61 @@
 
 Aplicação web de descoberta de filmes com `Python`, `Streamlit` e integração com a API do TMDB.
 
-O projeto foi inspirado por demos clássicas de recomendação de filmes em machine learning, especialmente pela ideia de transformar o sistema em uma interface simples e demonstrável. Hoje, porém, a aplicação segue um caminho proprio e usa a TMDB como fonte principal para busca, detalhes, pôsters, elenco e recomendações.
+A aplicação usa a TMDB como fonte principal para busca, detalhes, pôsteres, elenco e recomendações. O projeto também mantém um código de recomendador local como referência, mas o fluxo principal atual prioriza a base de dados do TMDB.
 
 ## O que o app faz
 
 - busca filmes diretamente na TMDB (The Movie Database);
-- mostra detalhes como título, data de lançamento, nota e gêneros;
-- exibe pôster e sinopse do filme selecionado;
-- apresenta elenco principal e direção;
-- carrega recomendações oficiais da TMDB;
-- mostra também uma lista de filmes similares, baseada em dados.
+- exibe detalhes completos do filme selecionado;
+- mostra pôster, sinopse, nota, elenco principal e direção;
+- carrega recomendações oficiais e filmes similares do TMDB;
+- permite o usuário salvar filmes favoritos e marcar filmes como assistidos;
+- oferece recomendações locais como complemento, mas a fonte principal é o TMDB.
 
 ## Stack usada
 
 - `Python`
 - `Streamlit`
-- `requests`
 - `scikit-learn`
 - `pandas`
 - `TMDB API`
+- `MongoDB`
+- `pymongo`
+- `bcrypt`
 
 ## Estrutura do projeto
 
 ```text
-.
 |-- app.py
-|-- src/
-|   |-- tmdb_client.py
-|   |-- recommender.py
-|   `-- train_model.py
-|-- data/
-|   `-- movies.csv
-|-- artifacts/
+|-- README.md
 |-- requirements.txt
 |-- .env
-`-- README.md
+|-- data/
+|   -- movies.csv
+|-- artifacts/
+|-- src/
+|   |-- database.py
+|   |-- recommender.py
+|   |-- train_model.py
+|   |-- integrations/
+|   |   -- tmdb_client.py
+|   |-- users/
+|       |-- user.py
+|       |-- user_favorites.py
+|       |-- user_watched.py
 ```
 
 ## Arquivos principais
 
 - `app.py`: interface Streamlit e fluxo principal da aplicação.
-- `src/tmdb_client.py`: cliente responsavel por autenticar e consultar a API da TMDB.
-- `src/recommender.py`: código do recomendador local antigo, mantido no repositório mas fora do fluxo principal atual.
-- `src/train_model.py`: script relacionado ao recomendador local antigo.
+- `src/integrations/tmdb_client.py`: cliente responsável por autenticar e consumir a API do TMDB.
+- `src/recommender.py`: código do recomendador local que gera sugestões a partir de um dataset CSV.
+- `src/train_model.py`: script de treino do recomendador local.
+- `src/users/user.py`, `src/users/user_favorites.py`, `src/users/user_watched.py`: serviços de usuário, favoritos e assistidos.
 
-## Configuracao
+## Configuração
 
-Crie um arquivo `.env` na raiz do projeto com pelo menos uma destas opções:
+Crie um arquivo `.env` na raiz do projeto com uma destas opções:
 
 ```env
 TMDB_API_READ_ACCESS_TOKEN=seu_token_aqui
@@ -65,13 +73,13 @@ O app prioriza `TMDB_API_READ_ACCESS_TOKEN`, mas aceita fallback com `API_KEY`.
 ## Como executar
 
 1. Crie e ative um ambiente virtual.
-2. Instale as dependencias:
+2. Instale as dependências:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-3. Inicie a aplicação:
+3. Execute a aplicação:
 
 ```bash
 streamlit run app.py
@@ -79,12 +87,12 @@ streamlit run app.py
 
 ## Como funciona
 
-1. O usuario digita o nome de um filme.
-2. O app consulta o endpoint de busca da TMDB.
-3. O usuario escolhe um resultado da lista.
-4. O app busca os detalhes completos do filme, incluindo `credits`.
-5. Em seguida, consulta recomendações e filmes similares da própria TMDB.
-6. Tudo isso e exibido na interface com pôsters e metadados.
+1. O usuário digita o nome de um filme.
+2. O app consulta a TMDB e mostra os resultados.
+3. O usuário escolhe um filme.
+4. O app carrega os detalhes do filme, incluindo créditos e sinopse em português quando disponível.
+5. O app exibe recomendações oficiais do TMDB e filmes similares.
+6. O app também mostra recomendações locais como complemento, quando o modelo estiver disponível.
 
 ## Endpoints TMDB utilizados
 
@@ -95,6 +103,7 @@ streamlit run app.py
 
 ## Observações
 
-- O projeto ainda contém arquivos do recomendador local anterior para referência e possivel reaproveitamento.
-- O `.env` esta ignorado no `.gitignore` e não deve ser versionado.
-- Se você alterar credenciais e o Streamlit continuar com comportamento antigo, reinicie o processo do app.
+- A TMDB é a fonte principal de recomendações e conteúdo.
+- O arquivo `data/movies.csv` e o código de recomendador local permanecem no projeto como referência, mas não são a fonte única.
+- O `.env` deve ser mantido local e não versionado.
+- Se alterar credenciais e o Streamlit continuar com comportamento antigo, reinicie o app.
