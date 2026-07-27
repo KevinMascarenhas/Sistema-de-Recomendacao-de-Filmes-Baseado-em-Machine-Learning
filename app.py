@@ -156,7 +156,6 @@ def render_recommendations_for_movie(recommender: MovieRecommender, movie_detail
             tmdb_recommendations = []
 
     if tmdb_recommendations:
-        st.subheader("Recomendações TMDB")
         cols = st.columns(min(len(tmdb_recommendations), 3))
         for index, movie in enumerate(tmdb_recommendations):
             with cols[index % len(cols)]:
