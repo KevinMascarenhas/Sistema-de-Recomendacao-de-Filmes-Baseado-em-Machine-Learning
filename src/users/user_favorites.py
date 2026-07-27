@@ -1,4 +1,4 @@
-from typing import List
+from typing import Any, Dict, List
 
 from bson import ObjectId
 from pymongo.collection import Collection
@@ -19,21 +19,43 @@ class UserFavorites:
         return ObjectId(user_id)
 
     @staticmethod
-    def _validate_movie_id(movie_id: int) -> None:
+    def _validate_movie_id(movie_id: int) -> int:
         if not isinstance(movie_id, int) or isinstance(movie_id, bool) or movie_id <= 0:
             raise ValueError("ID de filme inválido.")
+
+        return movie_id
+
+    @staticmethod
+    def _validate_rating(rating: Any) -> float:
+        if rating is None:
+            return 0.0
+
+        if isinstance(rating, bool):
+            raise ValueError("Avaliação inválida.")
+
+        if not isinstance(rating, (int, float)):
+            raise ValueError("Avaliação deve ser um número entre 0 e 5.")
+
+        rating_float = float(rating)
+        if rating_float < 0 or rating_float > 5:
+            raise ValueError("Avaliação deve ser um número entre 0 e 5.")
+
+        return rating_float
 
     def _normalize_movie_ids(self, movie_ids: List[int]) -> List[int]:
         if not isinstance(movie_ids, list):
             raise ValueError("A lista de favoritos deve ser enviada em formato de lista.")
 
-        normalized_ids: List[int] = [] 
-        seen = set() # seen é um conjunto que armazena os IDs de filmes já processados para evitar duplicatas.
+        normalized_ids: List[int] = []
+        seen = set()
 
         for movie_id in movie_ids:
+            if isinstance(movie_id, str) and movie_id.isdigit():
+                movie_id = int(movie_id)
+
             self._validate_movie_id(movie_id)
 
-            if movie_id in seen: 
+            if movie_id in seen:
                 continue
 
             seen.add(movie_id)
@@ -42,30 +64,105 @@ class UserFavorites:
         if len(normalized_ids) < self.MIN_FAVORITES or len(normalized_ids) > self.MAX_FAVORITES:
             raise ValueError(
                 f"Usuário deve definir entre {self.MIN_FAVORITES} e {self.MAX_FAVORITES} favoritos."
-            ) 
+            )
 
         return normalized_ids
 
-    def add_favorite(self, user_id: str, movie_id: int) -> bool:
-        user_id_obj = self._validate_user_id(user_id)
-        self._validate_movie_id(movie_id)
+    def _normalize_favorite_entries(self, favorite_values: List[Any]) -> List[Dict[str, Any]]:
+        if not isinstance(favorite_values, list):
+            raise ValueError("A lista de favoritos deve ser enviada em formato de lista.")
 
-        user = self.users.find_one({"_id": user_id_obj}, {"favorites": 1}) # find_one é uma função do pymongo que retorna o primeiro documento que corresponde à consulta. Neste caso, ele busca o usuário pelo ID e retorna apenas o campo "favorites" do documento. favorites: 1 porque indica que queremos incluir somente o campo "favorites" no resultado da consulta.
+        normalized_entries: List[Dict[str, Any]] = []
+        seen = set()
+
+        for value in favorite_values:
+            if isinstance(value, dict):
+                movie_id = value.get("movie_id")
+                rating = value.get("rating", 0.0)
+            else:
+                movie_id = value
+                rating = 0.0
+
+            if isinstance(movie_id, str) and movie_id.isdigit():
+                movie_id = int(movie_id)
+
+            self._validate_movie_id(movie_id)
+            rating = self._validate_rating(rating)
+
+            if movie_id in seen:
+                continue
+
+            seen.add(movie_id)
+            normalized_entries.append({"movie_id": movie_id, "rating": rating})
+
+        if len(normalized_entries) < self.MIN_FAVORITES or len(normalized_entries) > self.MAX_FAVORITES:
+            raise ValueError(
+                f"Usuário deve definir entre {self.MIN_FAVORITES} e {self.MAX_FAVORITES} favoritos."
+            )
+
+        return normalized_entries
+
+    def _load_user(self, user_id: str) -> dict[str, Any]:
+        user_id_obj = self._validate_user_id(user_id)
+        user = self.users.find_one({"_id": user_id_obj}, {"favorites": 1})
 
         if not user:
             raise ValueError("Usuário não encontrado.")
 
-        favorites = user.get("favorites", [])
+        return user
 
-        if len(favorites) >= self.MAX_FAVORITES:
-            raise ValueError(f"Usuário já atingiu o máximo de {self.MAX_FAVORITES} favoritos.")
+    def _normalize_favorite_list(self, raw_favorites: Any) -> List[Dict[str, Any]]:
+        if not raw_favorites:
+            return []
 
-        if movie_id in favorites:
+        if isinstance(raw_favorites, list):
+            return self._normalize_favorite_entries(raw_favorites)
+
+        raise ValueError("Formato de favoritos inválido.")
+
+    def add_or_update_favorite(self, user_id: str, movie_id: int, rating: Any = 0.0) -> bool:
+        user_id_obj = self._validate_user_id(user_id)
+        movie_id = self._validate_movie_id(movie_id)
+        rating = self._validate_rating(rating)
+
+        current_entries = self.list_favorite_entries(user_id)
+        updated = False
+
+        for entry in current_entries:
+            if entry["movie_id"] == movie_id:
+                entry["rating"] = rating
+                updated = True
+                break
+
+        if not updated:
+            if len(current_entries) >= self.MAX_FAVORITES:
+                raise ValueError(f"Usuário já atingiu o máximo de {self.MAX_FAVORITES} favoritos.")
+
+            current_entries.append({"movie_id": movie_id, "rating": rating})
+
+        result = self.users.update_one(
+            {"_id": user_id_obj},
+            {"$set": {"favorites": current_entries}},
+        )
+
+        if result.matched_count == 0:
+            raise ValueError("Usuário não encontrado.")
+
+        return result.modified_count > 0 or updated
+
+    def remove_favorite(self, user_id: str, movie_id: int) -> bool:
+        user_id_obj = self._validate_user_id(user_id)
+        movie_id = self._validate_movie_id(movie_id)
+
+        current_entries = self.list_favorite_entries(user_id)
+        remaining_entries = [entry for entry in current_entries if entry["movie_id"] != movie_id]
+
+        if len(remaining_entries) == len(current_entries):
             return False
 
         result = self.users.update_one(
             {"_id": user_id_obj},
-            {"$addToSet": {"favorites": movie_id}}, # addToSet é um operador do MongoDB que adiciona um valor a um array somente se ele ainda não estiver presente. Neste caso, ele adiciona o movie_id ao array favorites do usuário, garantindo que não haja duplicatas.
+            {"$set": {"favorites": remaining_entries}},
         )
 
         if result.matched_count == 0:
@@ -73,55 +170,42 @@ class UserFavorites:
 
         return result.modified_count > 0
 
-    def remove_favorite(self, user_id: str, movie_id: int) -> bool:
-        user_id_obj = self._validate_user_id(user_id)
-        self._validate_movie_id(movie_id)
-
-        result = self.users.update_one(
-            {"_id": user_id_obj},
-            {"$pull": {"favorites": movie_id}}, # pull é um operador do MongoDB que remove todos os elementos de um array que correspondem a uma condição especificada. Neste caso, ele remove o movie_id do array favorites do usuário.
-        )
-
-        if result.matched_count == 0:
-            raise ValueError("Usuário não encontrado.")
-
-        return result.modified_count > 0
+    def list_favorite_entries(self, user_id: str) -> List[Dict[str, Any]]:
+        user = self._load_user(user_id)
+        raw_favorites = user.get("favorites", [])
+        return self._normalize_favorite_list(raw_favorites)
 
     def list_favorites(self, user_id: str) -> List[int]:
-        user_id_obj = self._validate_user_id(user_id)
-
-        user = self.users.find_one({"_id": user_id_obj}, {"favorites": 1})
-
-        if not user:
-            raise ValueError("Usuário não encontrado.")
-
-        return user.get("favorites", [])
+        entries = self.list_favorite_entries(user_id)
+        return [entry["movie_id"] for entry in entries]
 
     def count_favorites(self, user_id: str) -> int:
-        user_id_obj = self._validate_user_id(user_id)
-
-        user = self.users.find_one({"_id": user_id_obj}, {"favorites": 1})
-
-        if not user:
-            raise ValueError("Usuário não encontrado.")
-
-        return len(user.get("favorites", []))
+        return len(self.list_favorite_entries(user_id))
 
     def is_favorite(self, user_id: str, movie_id: int) -> bool:
-        user_id_obj = self._validate_user_id(user_id)
-        self._validate_movie_id(movie_id) 
+        movie_id = self._validate_movie_id(movie_id)
+        entries = self.list_favorite_entries(user_id)
+        return any(entry["movie_id"] == movie_id for entry in entries)
 
-        user = self.users.find_one({"_id": user_id_obj, "favorites": movie_id}) 
-
-        return user is not None
+    def get_favorite_rating(self, user_id: str, movie_id: int) -> float | None:
+        movie_id = self._validate_movie_id(movie_id)
+        for entry in self.list_favorite_entries(user_id):
+            if entry["movie_id"] == movie_id:
+                return entry.get("rating", 0.0)
+        return None
 
     def set_initial_favorites(self, user_id: str, movie_ids: List[int]) -> bool:
         user_id_obj = self._validate_user_id(user_id)
         normalized_ids = self._normalize_movie_ids(movie_ids)
+        existing_entries = {entry["movie_id"]: entry.get("rating", 0.0) for entry in self.list_favorite_entries(user_id)}
+        favorite_entries = [
+            {"movie_id": movie_id, "rating": existing_entries.get(movie_id, 0.0)}
+            for movie_id in normalized_ids
+        ]
 
         result = self.users.update_one(
             {"_id": user_id_obj},
-            {"$set": {"favorites": normalized_ids}}, # set é um operador do MongoDB que substitui o valor de um campo específico em um documento. Neste caso, ele define o campo "favorites" do usuário com o array normalized_ids, que contém os IDs de filmes normalizados e validados.
+            {"$set": {"favorites": favorite_entries}},
         )
 
         if result.matched_count == 0:
